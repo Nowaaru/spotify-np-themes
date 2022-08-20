@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>
+        spotify-np: bar
+    </title>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/reconnecting-websocket/1.0.0/reconnecting-websocket.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+</head>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:ital@0;1&display=swap');
+
+    span {
+        font-family: 'Roboto', sans-serif;
+        font-weight: 600;
+        text-shadow: 0px 0px 4px white;
+    }
+
+    html body {
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+    }
+
+    #bar-main {
+        --bar-progress: 0px;
+        display: flex;
+        flex-direction: column;
+        position: absolute;
+        bottom: 0px;
+        opacity: 0;
+    }
+
+    #bar-main::after {
+        content: " ";
+        background-color: green;
+        max-width: 100%;
+        width: var(--bar-progress);
+        height: 8px;
+        border-top-right-radius: 4px;
+        border-bottom-right-radius: 4px;
+        transition: width ease-in-out 1s
+    }
+
+    #metadata {
+        position: relative;
+    }
+
+    #data {
+        width: 100vw;
+        display: flex;
+        justify-content: center;
+    }
+
+    #time-start {
+        position: absolute;
+        left: 0;
+    }
+
+    #time-end {
+        position: absolute;
+        right: 0px;
+        top: 0px;
+    }
+</style>
+
+<body>
+    <div id="bar-main">
+        <div id="metadata">
+            <span id="time-start">
+                00:00
+            </span>
+            <span id="data">
+                your best friend jippy - [04] THANKS TO MY MACHINE
+            </span>
+            <span id="time-end">
+                01:07
+            </span>
+        </div>
+    </div>
+</body>
+<script>
+    let songLength = 0;
+    let playingStatus = "stopped";
+    const showPlayer = (bool) => $("#bar-main").animate({opacity: bool ? 1 : 0});
+    const getTimerText = ({secs}) => `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(Math.floor(secs % 60)).padStart(2, '0')}`
+    $.getJSON("config").then(({port_ws}) => {
+        const webSocket = new ReconnectingWebSocket(`ws://localhost:${port_ws}`);
+        webSocket.onmessage = ({data}) => {
+            const message = JSON.parse(data);
+            switch (message.event) {
+                case "progress":
+                    if (playingStatus === "playing" && songLength > 0)
+                        showPlayer(true);
+
+                    const {position} = message.progress;
+                    const el = document.getElementById("bar-main");
+                    el.style.setProperty('--bar-progress', `${position * 100}%`);
+
+                    document.getElementById("time-start").innerText = songLength > 0 ? getTimerText({secs: songLength * position}) : "00:00";
+                    break;
+                case "track":
+                    const {track} = message;
+                    const {album, artists, length, name, status} = track;
+                    playingStatus = status;
+
+                    if (playingStatus !== "playing")
+                        showPlayer(false)
+                    else showPlayer(true);
+
+                    document.getElementById("time-end").innerText = getTimerText(length);
+                    document.getElementById("data").innerText = `${artists[0] ? `${artists[0]} - ${name}` : name
+                        }`
+                    songLength = length.secs;
+                    break;
+                case "state":
+                    const {state} = message;
+                    if (state !== "playing")
+                        showPlayer(false);
+
+                    playingStatus = state;
+                    break;
+            }
+        }
+    }).catch(console.error);
+</script>
+
+</html>
